@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "davinci-resolve-mcp"
+version = "4.13.1"
+description = "MCP server for DaVinci Resolve (compound server, stdio)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# The same set install.py puts in its virtual environment (requirements.txt).
+dependencies = [
+  "mcp[cli]>=1.30,<2",
+  "pyaaf2>=1.7.1",
+]
+
+[project.scripts]
+davinci-resolve-mcp = "src.server:main"
+
+[project.urls]
+Homepage = "https://github.com/samuelgursky/davinci-resolve-mcp"
+
+# server.py imports `src.utils ...`, so `src` is shipped as a top-level package.
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
+
+[tool.setuptools.package-data]
+"src" = ["**/*.py"]

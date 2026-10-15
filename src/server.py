@@ -1042,8 +1042,24 @@ def resolve_is_running() -> Optional[bool]:
     return _resolve_runtime.runtime_mode()["running"]
 
 
+ENV_AUTO_LAUNCH = "DAVINCI_RESOLVE_MCP_AUTO_LAUNCH"
+
+
+def auto_launch_enabled(env=None) -> bool:
+    """May get_resolve() start DaVinci Resolve when no instance is running?
+
+    On by default, as it always was. DAVINCI_RESOLVE_MCP_AUTO_LAUNCH=0 (or false,
+    no, off) turns it off for clients whose readiness checks must never open the
+    user's application; they get the usual not-connected error instead.
+    """
+    values = os.environ if env is None else env
+    value = str(values.get(ENV_AUTO_LAUNCH, "1")).strip().lower()
+    return value not in {"0", "false", "no", "off", "disabled"}
+
+
 def get_resolve():
-    """Lazy connection to Resolve — connects on first tool call, auto-launches if needed."""
+    """Lazy connection to Resolve — connects on first tool call, auto-launches if needed
+    (unless DAVINCI_RESOLVE_MCP_AUTO_LAUNCH turns that off)."""
     global resolve
     with _resolve_lock:
         if resolve is not None and _is_resolve_handle_live(resolve):
@@ -1070,6 +1086,12 @@ def get_resolve():
             return None
         if already_running is None:
             logger.warning("Could not determine whether Resolve is running; not launching it.")
+            return None
+        if not auto_launch_enabled():
+            # The operator asked for the user to start Resolve themselves: a client's
+            # readiness check must not open the application behind their back. The
+            # explicit resolve_control(action="launch") is unaffected.
+            logger.info("Resolve not running; auto-launch is off (DAVINCI_RESOLVE_MCP_AUTO_LAUNCH), not launching it.")
             return None
         logger.info("Resolve not running, attempting to launch automatically...")
         _launch_resolve()
@@ -17461,6 +17483,10 @@ def resolve_control(action: str, params: Optional[Dict[str, Any]] = None) -> Dic
                 )
             if not mode["running"]:
                 _launch_resolve(headless=bool(headless))
+        elif not auto_launch_enabled() and not _resolve_runtime.runtime_mode()["running"]:
+            # An explicit launch request is the user's act; the auto-launch switch
+            # only covers the implicit launch inside get_resolve().
+            _launch_resolve()
         r = get_resolve()  # auto-launches if not running
         if r is not None:
             return _ok(message="DaVinci Resolve is running and connected.",
@@ -33749,7 +33775,8 @@ def _install_threaded_tool_dispatch(fastmcp) -> int:
     return wrapped
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the server: the console entry point and `python src/server.py` share it."""
     # Before any tool can answer: a saved result_envelope default has to be in
     # force on the first call, not the second.
     logger.info(f"Result envelope mode: {_apply_persisted_envelope_mode()}")
@@ -33788,3 +33815,7 @@ if __name__ == "__main__":
 
     logger.info("Starting DaVinci Resolve MCP Server (37 compound tools)")
     run_fastmcp_stdio(mcp)
+
+
+if __name__ == "__main__":
+    main()
